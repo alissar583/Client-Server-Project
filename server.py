@@ -73,5 +73,5 @@ def start_server(host, port):
 
 if __name__ == "__main__":
     host = "127.0.0.1"  # Replace with your desired server IP
-    port = 8080  # Replace with your desired server port
+    port = 9090  # Replace with your desired server port
     start_server(host, port)
