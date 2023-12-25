@@ -4,165 +4,75 @@ import mysql.connector
 import jwt
 from cryptography.fernet import Fernet
 import json
-from cryptography.hazmat.primitives.asymmetric import rsa
+import hashlib
+import base64
 from cryptography.hazmat.primitives import serialization
-from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.primitives.asymmetric import padding
-from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.backends import default_backend
-from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
-import os
-
-# #######################
-# # Generate private-public key pair for the client
-# client_private_key = rsa.generate_private_key(
-#     public_exponent=65537,
-#     key_size=2048,
-#     backend=default_backend()
-# )
-# client_public_key = client_private_key.public_key()
-
-# # Store private key securely
-# client_private_pem = client_private_key.private_bytes(
-#     encoding=serialization.Encoding.PEM,
-#     format=serialization.PrivateFormat.PKCS8,
-#     encryption_algorithm=serialization.NoEncryption()
-# )
-# with open("client_private_key.pem", "wb") as f:
-#     f.write(client_private_pem)
-
-# # Handshaking with the server
-# def handshake(server_public_key):
-#     # Client sends its public key to the server
-#     client_public_key_bytes = client_public_key.public_bytes(
-#         encoding=serialization.Encoding.PEM,
-#         format=serialization.PublicFormat.SubjectPublicKeyInfo
-#     )
-
-#     # Server receives and stores the client's public key
-#     received_client_public_key = serialization.load_pem_public_key(
-#         client_public_key_bytes,
-#         backend=default_backend()
-#     )
-
-#     # Server sends its public key to the client
-#     server_public_key_bytes = server_public_key.public_bytes(
-#         encoding=serialization.Encoding.PEM,
-#         format=serialization.PublicFormat.SubjectPublicKeyInfo
-#     )
-
-#     # Client receives and stores the server's public key
-#     received_server_public_key = serialization.load_pem_public_key(
-#         server_public_key_bytes,
-#         backend=default_backend()
-#     )
-
-#     return received_server_public_key, received_client_public_key
-
-
-# def generate_iv():
-#         return os.urandom(16)
-
-
-
-# # Generate session key
-# def generate_session_key():
-#     return os.urandom(32)  # 256-bit key
-
-# def encrypt(plaintext, session_key):
-#     block_size = 16  # AES block size is 16 bytes
-
-#     # Pad the plaintext data
-#     padding_length = block_size - (len(plaintext) % block_size)
-#     padded_plaintext = plaintext + bytes([padding_length] * padding_length)
-
-#     iv = generate_iv()  # Invoke the generate_iv function to obtain the IV
-#     cipher = Cipher(algorithms.AES(session_key), modes.CBC(iv), backend=default_backend())
-#     encryptor = cipher.encryptor()
-#     ciphertext = encryptor.update(padded_plaintext) + encryptor.finalize()
-#     return iv + ciphertext
-
-
-# def decrypt(ciphertext, session_key):
-#     block_size = 16  # AES block size is 16 bytes
-
-#     iv = ciphertext[:block_size]  # Extract the IV from the ciphertext
-#     ciphertext = ciphertext[block_size:]  # Remove the IV from the ciphertext
-
-#     cipher = Cipher(algorithms.AES(session_key), modes.CBC(iv), backend=default_backend())
-#     decryptor = cipher.decryptor()
-#     padded_plaintext = decryptor.update(ciphertext) + decryptor.finalize()
-
-#     # Remove the PKCS7 padding from the plaintext
-#     padding_length = padded_plaintext[-1]
-#     plaintext = padded_plaintext[:-padding_length]
-
-#     return plaintext
-    
-# # Establish connection with the server
-# server_address = '127.0.0.1'  # Replace with the server's IP address
-# server_port = 8080  # Replace with the server's port number
-
-# with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as client_socket:
-#     client_socket.connect((server_address, server_port))
-
-#     # Handshake with the server
-#     server_public_key = None  # Load the server's public key from file or database
-#      # Load the server's public key from file
-#     with open("server_public_key.pem", "rb") as f:
-#         server_public_key = serialization.load_pem_public_key(
-#             f.read(),
-#             backend=default_backend()
-#         )
-
-#     server_public_key, _ = handshake(server_public_key)
-
-#     # Client generates session key and sends it to the server using PGP
-#     session_key = generate_session_key()
-#     encrypted_session_key = server_public_key.encrypt(
-#         session_key,
-#         padding.OAEP(
-#             mgf=padding.MGF1(algorithm=hashes.SHA256()),
-#             algorithm=hashes.SHA256(),
-#             label=None
-#         )
-#     )
-
-#     # Send the encrypted session key to the server
-#     client_socket.sendall(encrypted_session_key)
-
-#     # Wait for the encrypted response from the server
-#     encrypted_response = client_socket.recv(1024)
-
-#     # Decrypt the response from the server using the session key
-#     decrypted_response = decrypt(encrypted_response, session_key)
-
-#     # Process the decrypted response
-#     print("Received response from server:", decrypted_response.decode())
-
-#     # Send completed projects to the server
-#     data = "Completed projects data"  # Replace with your actual data
-#     encrypted_data = encrypt(data.encode(), session_key)
-#     client_socket.sendall(encrypted_data)
-
-#     # Wait for the confirmation message from the server
-#     encrypted_confirmation = client_socket.recv(1024)
-
-#     # Decrypt the confirmation message using the session key
-#     decrypted_confirmation = decrypt(encrypted_confirmation, session_key)
-
-#     # Process the decrypted confirmation message
-#     print("Received confirmation from server:", decrypted_confirmation.decode())
-# ###########################
+from cryptography.hazmat.primitives.asymmetric import padding
+from cryptography.hazmat.primitives import hashes
 
 # Generate a random symmetric key
 key = b"XaLc7Pd8qK5GJfEva0v1nZ0qDLgB8KkHRg9M8aIa8io="
 # Create a Fernet cipher object using the key
 cipher = Fernet(key)
 
-# # Encrypt the data using the cipher
-# encrypted_data = cipher.encrypt(b"Hello, server!")
+def load_private_key():
+    # Load the university doctor's private key from a PEM file
+    with open('client_private_key.pem', 'rb') as key_file:
+        private_key = serialization.load_pem_private_key(
+            key_file.read(),
+            password=None,
+            backend=default_backend()
+        )
+    return private_key
 
+def load_public_key():
+    # Load the university doctor's public key from a PEM file
+    with open('client_public_key.pem', 'rb') as key_file:
+        public_key = serialization.load_pem_public_key(
+            key_file.read(),
+            backend=default_backend()
+        )
+    return public_key
+
+def verify_signature(data, signature):
+    # Load the university doctor's public key from a file or other source
+    public_key = load_public_key()
+
+    try:
+        # Verify the signature using the public key
+        public_key.verify(
+            signature,
+            data.encode(),
+            padding.PSS(
+                mgf=padding.MGF1(hashes.SHA256()),
+                salt_length=padding.PSS.MAX_LENGTH
+            ),
+            hashes.SHA256()
+        )
+
+        return True
+    except Exception:
+        return False
+        
+def sign_data(data):
+    # Load the university doctor's private key
+    private_key = load_private_key()
+
+    # Sign the data using the private key
+    signature = private_key.sign(
+        data.encode(),
+        padding.PSS(
+            mgf=padding.MGF1(hashes.SHA256()),
+            salt_length=padding.PSS.MAX_LENGTH
+        ),
+        hashes.SHA256()
+    )
+
+    # Convert the signature to a base64-encoded string
+    signature_str = base64.b64encode(signature).decode('utf-8')
+
+    return signature_str
 
 def send_request(host, port, request_data):
     client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -175,16 +85,56 @@ def send_request(host, port, request_data):
     # Convert request_data to bytes
     request_data_bytes = request_data.encode()
 
-    encrypted_data = cipher.encrypt(request_data_bytes)
+    ################
+    # Generate a hash of the request data
+    hash_value = hashlib.sha256(request_data_bytes).hexdigest()
+
+    # Sign the hash with the university doctor's private key
+    # Replace the following line with the actual signing process
+    signature = sign_data(hash_value)
+
+    # Create a dictionary to hold the request data and signature
+    signed_data = {"data": request_data, "signature": signature}
+
+    # Convert the signed_data to JSON string
+    signed_data_json = json.dumps(signed_data)
+
+   # Encrypt the data using the cipher
+    encrypted_data = cipher.encrypt(signed_data_json.encode())
+
     client_socket.sendall(encrypted_data)
 
     response = client_socket.recv(1024)
     decrypted_data = cipher.decrypt(response)
     response_data = decrypted_data.decode()
-    print("Response:", response_data)
+
+    # Verify the digital signature received from the server
+    response_data_json = json.loads(response_data)
+    response_signature = response_data_json.get("signature")
+    response_data = response_data_json.get("data")
+
+    # Verify the signature using the university doctor's public key
+    is_valid_signature = verify_signature(response_data, response_signature)
+
+    if is_valid_signature:
+        print("Signature is valid.")
+        print("Response:", response_data)
+    else:
+        print("Signature is not valid.")
 
     client_socket.close()
     return response_data
+    ###################
+    # encrypted_data = cipher.encrypt(request_data_bytes)
+    # client_socket.sendall(encrypted_data)
+
+    # response = client_socket.recv(1024)
+    # decrypted_data = cipher.decrypt(response)
+    # response_data = decrypted_data.decode()
+    # print("Response:", response_data)
+
+    # client_socket.close()
+    # return response_data
 
 
 def user_exists(username):
@@ -379,12 +329,12 @@ if __name__ == "__main__":
             "token": token,
             "phone": phone,
             "username": decode_token(token, "username"),
-            "request_choice" : "4",
+            "request_choice": "4",
         }
 
         json_data = json.dumps(request_data)
 
-        send_request(host, port,json_data)
+        send_request(host, port, json_data)
 
     else:
         print("Invalid choice.")
