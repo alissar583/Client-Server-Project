@@ -9,6 +9,8 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.asymmetric import rsa
+
 
 # Generate a random symmetric key
 key = b"XaLc7Pd8qK5GJfEva0v1nZ0qDLgB8KkHRg9M8aIa8io="
@@ -16,6 +18,24 @@ key = b"XaLc7Pd8qK5GJfEva0v1nZ0qDLgB8KkHRg9M8aIa8io="
 # Create a Fernet cipher object using the key
 cipher = Fernet(key)
 
+def load_server_private_key():
+    # Load the university doctor's private key from a PEM file
+    with open('server_private_key.pem', 'rb') as key_file:
+        private_key = serialization.load_pem_private_key(
+            key_file.read(),
+            password=None,
+            backend=default_backend()
+        )
+    return private_key
+
+def load_server_public_key():
+    # Load the university doctor's public key from a PEM file
+    with open('server_public_key.pem', 'rb') as key_file:
+        public_key = serialization.load_pem_public_key(
+            key_file.read(),
+            backend=default_backend()
+        )
+    return public_key
 
 def load_private_key():
     # Load the university doctor's private key from a PEM file
@@ -38,7 +58,7 @@ def load_public_key():
 
 def sign_data(data):
     # Load the university doctor's private key
-    private_key = load_private_key()
+    private_key = load_server_private_key()
 
     # Sign the data using the private key
     signature = private_key.sign(
@@ -79,11 +99,12 @@ def update_record_by_username(username, new_value):
 def verify_signature(data, signature):
     # Load the university doctor's public key from a file or other source
     public_key = load_public_key()
+    # print("dataaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa in verify",data.encode())
 
     try:
         # Verify the signature using the public key
         public_key.verify(
-            signature,
+            base64.b64decode(signature),
             data.encode(),
             padding.PSS(
                 mgf=padding.MGF1(hashes.SHA256()),
@@ -119,6 +140,7 @@ def handle_request(client_socket):
         print("Signature is valid.")
         print("Request:", request_data)
         # Process the request and perform the necessary operations
+        response = "Valid Signature"
 
     else:
         print("Signature is not valid.")
@@ -129,6 +151,8 @@ def handle_request(client_socket):
         "data": response,
         "signature": sign_data(response)
     }
+    # print("responnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnce",response)
+
 
     # Convert the signed_response_data to JSON string
     signed_response_data_json = json.dumps(signed_response_data)
@@ -168,8 +192,40 @@ def start_server(host, port):
         client_socket, addr = server_socket.accept()
         handle_request(client_socket)
 
+def generate_key_pair():
+    # Generate a new RSA private key
+    private_key = rsa.generate_private_key(
+        public_exponent=65537,  # Commonly used value for the public exponent
+        key_size=2048,  # Key size in bits
+        backend=default_backend()
+    )
+
+    # Get the public key from the private key
+    public_key = private_key.public_key()
+
+    # Serialize the private key to PEM format
+    private_key_pem = private_key.private_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PrivateFormat.PKCS8,
+        encryption_algorithm=serialization.NoEncryption()
+    )
+
+    # Serialize the public key to PEM format
+    public_key_pem = public_key.public_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PublicFormat.SubjectPublicKeyInfo
+    )
+
+    # Save the private key to a file
+    with open('server_private_key.pem', 'wb') as private_key_file:
+        private_key_file.write(private_key_pem)
+
+    # Save the public key to a file
+    with open('server_public_key.pem', 'wb') as public_key_file:
+        public_key_file.write(public_key_pem)
 
 if __name__ == "__main__":
     host = "127.0.0.1"  # Replace with your desired server IP
     port = 8080  # Replace with your desired server port
+    generate_key_pair()
     start_server(host, port)
