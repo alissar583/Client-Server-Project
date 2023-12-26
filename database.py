@@ -5,4 +5,3 @@ from sqlalchemy.orm import sessionmaker
 
 db = SQLAlchemy()
 
-

@@ -230,6 +230,6 @@ def generate_key_pair():
 
 if __name__ == "__main__":
     host = "127.0.0.1"  # Replace with your desired server IP
-    port = 8080  # Replace with your desired server port
+    port = 8081  # Replace with your desired server port
     generate_key_pair()
     start_server(host, port)
