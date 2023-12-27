@@ -37,19 +37,19 @@ def load_server_public_key():
         )
     return public_key
 
-def load_private_key():
-    # Load the university doctor's private key from a PEM file
-    with open('client_private_key.pem', 'rb') as key_file:
-        private_key = serialization.load_pem_private_key(
-            key_file.read(),
-            password=None,
-            backend=default_backend()
-        )
-    return private_key
+# def load_private_key():
+#     # Load the university doctor's private key from a PEM file
+#     with open('client_private_key.pem', 'rb') as key_file:
+#         private_key = serialization.load_pem_private_key(
+#             key_file.read(),
+#             password=None,
+#             backend=default_backend()
+#         )
+#     return private_key
 
-def load_public_key():
+def load_public_key(username):
     # Load the university doctor's public key from a PEM file
-    with open('client_public_key.pem', 'rb') as key_file:
+    with open(f"{username}_public_key.pem" , 'rb') as key_file:
         public_key = serialization.load_pem_public_key(
             key_file.read(),
             backend=default_backend()
@@ -95,9 +95,9 @@ def update_record_by_username(username, new_value):
     cursor.close()
     connection.close()
 
-def verify_signature(data, signature):
+def verify_signature(data, signature,username):
     # Load the university doctor's public key from a file or other source
-    public_key = load_public_key()
+    public_key = load_public_key(username)
     # print("dataaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa in verify",data.encode())
 
     try:
@@ -137,7 +137,7 @@ def handle_request(client_socket):
      request_data = request_data_json["data"]    # Continue processing the request as needed
 
     # Verify the signature using the university doctor's public key
-     is_valid_signature = verify_signature(request_data, request_signature)
+     is_valid_signature = verify_signature(request_data, request_signature,request_data_json["username"])
 
      if is_valid_signature:
         print("Signature is valid.")

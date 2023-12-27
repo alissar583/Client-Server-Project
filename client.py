@@ -27,22 +27,22 @@ def load_server_public_key():
     return public_key
 
 
-def load_private_key():
+def load_private_key(username):
     # Load the university doctor's private key from a PEM file
-    with open("client_private_key.pem", "rb") as key_file:
+    with open(f"{username}_private_key.pem" , "rb") as key_file:
         private_key = serialization.load_pem_private_key(
             key_file.read(), password=None, backend=default_backend()
         )
     return private_key
 
 
-def load_public_key():
-    # Load the university doctor's public key from a PEM file
-    with open("client_public_key.pem", "rb") as key_file:
-        public_key = serialization.load_pem_public_key(
-            key_file.read(), backend=default_backend()
-        )
-    return public_key
+# def load_public_key():
+#     # Load the university doctor's public key from a PEM file
+#     with open("client_public_key.pem", "rb") as key_file:
+#         public_key = serialization.load_pem_public_key(
+#             key_file.read(), backend=default_backend()
+#         )
+#     return public_key
 
 
 def verify_signature(data, signature):
@@ -65,9 +65,9 @@ def verify_signature(data, signature):
         return False
 
 
-def sign_data(data):
+def sign_data(data,username):
     # Load the university doctor's private key
-    private_key = load_private_key()
+    private_key = load_private_key(username)
 
     # print("dataaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa in sign",data.encode())
 
@@ -109,9 +109,9 @@ def send_request(host, port, request_data):
         "request_choice" in response_data_python
         and response_data_python["request_choice"] == "5"
     ):
-        signature = sign_data(request_data[0])
+        signature = sign_data(response_data_python["markes"],response_data_python["username"])
         # Create a dictionary to hold the request data and signature
-        signed_data = {"data": request_data[0], "signature": signature}
+        signed_data = {"data": response_data_python["markes"], "signature": signature,"username":response_data_python["username"]}
         # Convert the signed_data to JSON string
         signed_data_json = json.dumps(signed_data)
         # Encrypt the data using the cipher
@@ -181,7 +181,7 @@ def get_user_role_id(username):
     role_id = result[0]
 
     cursor.nextset()  # Move to the next result set
-    cursor.close()
+    # cursor.close()
     connection.close()
 
     return role_id
@@ -283,7 +283,7 @@ def store_user_in_database(username, password, role_id, exists):
     connection.close()
 
 
-def generate_key_pair():
+def generate_key_pair(username):
     # Generate a new RSA private key
     private_key = rsa.generate_private_key(
         public_exponent=65537,  # Commonly used value for the public exponent
@@ -307,20 +307,21 @@ def generate_key_pair():
         format=serialization.PublicFormat.SubjectPublicKeyInfo,
     )
 
+    # Create unique filenames for the keys using the username
+    private_key_filename = f"{username}_private_key.pem"
+    public_key_filename = f"{username}_public_key.pem" 
     # Save the private key to a file
-    with open("client_private_key.pem", "wb") as private_key_file:
+    with open(private_key_filename, "wb") as private_key_file:
         private_key_file.write(private_key_pem)
 
     # Save the public key to a file
-    with open("client_public_key.pem", "wb") as public_key_file:
+    with open(public_key_filename, "wb") as public_key_file:
         public_key_file.write(public_key_pem)
 
 
 if __name__ == "__main__":
     host = "127.0.0.1"  # Replace with your server IP
-    port = 8080  # Replace with your server port
-
-    generate_key_pair()
+    port = 8081  # Replace with your server port
 
     # Prompt the user for input
 
@@ -328,29 +329,7 @@ if __name__ == "__main__":
         "Enter '1' to create an account or '2' to login or '3' to access university system or '4' to complete your info or '5' to submet markes: "
     )
 
-    if request_choice == "2":
-        username = input("Enter username: ")
-        password = input("Enter password: ")
-
-        if user_exists(username):
-            exists = True
-            # User exists, send login request
-            request_login = {
-                "action": "LOGIN",
-                "username": username,
-                "password": password,
-            }
-
-            json_data = json.dumps(request_login)
-
-            response = send_request(host, port, json_data)
-            
-            # print("Response",response)
-
-        else:
-            print("User does not exist. Please create an account.")
-
-    elif request_choice == "1":
+    if request_choice == "1":
         username = input("Enter username: ")
         password = input("Enter password: ")
         role_id = input("Enter role: ")
@@ -369,6 +348,28 @@ if __name__ == "__main__":
         response = send_request(host, port, json_data)
         # Store the user in the database
         store_user_in_database(username, password, role_id, exists)
+
+    elif request_choice == "2":
+        username = input("Enter username: ")
+        password = input("Enter password: ")
+
+        if user_exists(username):
+            exists = True
+            # User exists, send login request
+            request_login = {
+                "action": "LOGIN",
+                "username": username,
+                "password": password,
+            }
+
+            json_data = json.dumps(request_login)
+
+            response = send_request(host, port, json_data)
+
+            # print("Response",response)
+
+        else:
+            print("User does not exist. Please create an account.")
 
     elif request_choice == "3":
         token = input("token: ")
@@ -404,10 +405,17 @@ if __name__ == "__main__":
 
     elif request_choice == "5":
         token = input("Enter Your Token: ")
+        markes = input("Enter The Markes:")
+
         if decode_token(token, "role_id") == 2:
+            username = decode_token(token,"username")
+            generate_key_pair(username)
+
             request_data = {
-                "markes": ["first", "second"],
+                "action" : "Enter Markes",
+                "markes": markes,
                 "request_choice": "5",
+                "username":username,
             }
 
             json_data = json.dumps(request_data)
