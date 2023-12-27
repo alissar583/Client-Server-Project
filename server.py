@@ -37,19 +37,19 @@ def load_server_public_key():
         )
     return public_key
 
-def load_private_key():
-    # Load the university doctor's private key from a PEM file
-    with open('client_private_key.pem', 'rb') as key_file:
-        private_key = serialization.load_pem_private_key(
-            key_file.read(),
-            password=None,
-            backend=default_backend()
-        )
-    return private_key
+# def load_private_key():
+#     # Load the university doctor's private key from a PEM file
+#     with open('client_private_key.pem', 'rb') as key_file:
+#         private_key = serialization.load_pem_private_key(
+#             key_file.read(),
+#             password=None,
+#             backend=default_backend()
+#         )
+#     return private_key
 
-def load_public_key():
+def load_public_key(username):
     # Load the university doctor's public key from a PEM file
-    with open('client_public_key.pem', 'rb') as key_file:
+    with open(f"{username}_public_key.pem" , 'rb') as key_file:
         public_key = serialization.load_pem_public_key(
             key_file.read(),
             backend=default_backend()
@@ -75,7 +75,6 @@ def sign_data(data):
 
     return signature_str
 
-
 def update_record_by_username(username, new_value):
     # Establish a connection to the MySQL database
     connection = mysql.connector.connect(host="localhost", user="root", database="chat")
@@ -96,9 +95,9 @@ def update_record_by_username(username, new_value):
     cursor.close()
     connection.close()
 
-def verify_signature(data, signature):
+def verify_signature(data, signature,username):
     # Load the university doctor's public key from a file or other source
-    public_key = load_public_key()
+    public_key = load_public_key(username)
     # print("dataaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa in verify",data.encode())
 
     try:
@@ -127,38 +126,44 @@ def handle_request(client_socket):
     #  # Deserialize the received JSON to retrieve the original list
     # request_data_list = json.loads(request_data)
 
-    #################
-     # Verify the digital signature received from the client
     request_data_json = json.loads(request_data)
-    request_signature = request_data_json.get("signature")
-    request_data = request_data_json.get("data")
+
+    #################
+    if isinstance(request_data_json, dict):
+    # It's already a dictionary, proceed with further processing
+    # Access the dictionary values as needed
+
+     request_signature = request_data_json['signature']
+     request_data = request_data_json["data"]    # Continue processing the request as needed
 
     # Verify the signature using the university doctor's public key
-    is_valid_signature = verify_signature(request_data, request_signature)
+     is_valid_signature = verify_signature(request_data, request_signature,request_data_json["username"])
 
-    if is_valid_signature:
+     if is_valid_signature:
         print("Signature is valid.")
         print("Request:", request_data)
         # Process the request and perform the necessary operations
         response = "Valid Signature"
 
-    else:
+     else:
         print("Signature is not valid.")
         response = "Invalid Signature"
 
     # Create a dictionary to hold the response data and signature
-    signed_response_data = {
+     signed_response_data = {
         "data": response,
         "signature": sign_data(response)
-    }
+     }
     # print("responnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnce",response)
 
 
     # Convert the signed_response_data to JSON string
-    signed_response_data_json = json.dumps(signed_response_data)
+     signed_response_data_json = json.dumps(signed_response_data)
 
     # Encrypt the response data using the cipher
-    encrypted_data = cipher.encrypt(signed_response_data_json.encode())
+     encrypted_data = cipher.encrypt(signed_response_data_json.encode())
+    else:
+      encrypted_data = cipher.encrypt(request_data_json.encode())
 
     client_socket.sendall(encrypted_data)
     client_socket.close()
@@ -178,8 +183,7 @@ def handle_request(client_socket):
     # encrypted_data = cipher.encrypt(response_data)
 
     # client_socket.sendall(encrypted_data)
-    # client_socket.close()
-
+    # client_socket.close(
 
 def start_server(host, port):
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
