@@ -47,21 +47,17 @@ def send_encrypted_session_key(ssl_socket, encrypted_session_key):
 
 def create_tls_client():
     client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    client_socket.connect(('localhost', 8080))
+    client_socket.connect(('localhost', 8838))
 
     # Create an SSL context
     context = ssl.create_default_context()
-    print("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
-
     context.check_hostname = False
     context.verify_mode = ssl.CERT_NONE
 
     # Wrap the socket with TLS
     ssl_socket = context.wrap_socket(client_socket, server_hostname='localhost')
-
     # Perform the TLS handshake
     ssl_socket.do_handshake()
-
 
     # Send and receive data over the secure connection
     ssl_socket.send(b"Hello from the client!")
@@ -69,7 +65,7 @@ def create_tls_client():
     print(f"Received: {data.decode()}")
 
     # Load public key from file
-    with open('server_public_key.pem', 'rb') as key_file:
+    with open('server_new_public_key.pem', 'rb') as key_file:
         server_public_key = key_file.read()
 
     # Convert the loaded public key to a string

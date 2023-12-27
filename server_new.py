@@ -61,7 +61,7 @@ def send_approval_to_client(ssl_socket):
 
 def create_tls_server():
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    server_socket.bind(('localhost', 8080))
+    server_socket.bind(('localhost', 8838))
     server_socket.listen(1)
 
     print("Waiting for a connection...")
@@ -71,7 +71,7 @@ def create_tls_server():
 
     # Create an SSL context
     context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
-    context.load_cert_chain(certfile="server_certificate.pem", keyfile="server_private_key.pem")
+    context.load_cert_chain(certfile="server_certificate.pem", keyfile="server_new_private_key.pem")
 
     # Wrap the socket with TLS
     ssl_socket = context.wrap_socket(client_socket, server_side=True)

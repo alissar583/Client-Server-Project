@@ -11,6 +11,9 @@ from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import rsa
+from cryptography import x509
+from cryptography.x509.oid import NameOID
+
 
 # Generate a random symmetric key
 key = b"XaLc7Pd8qK5GJfEva0v1nZ0qDLgB8KkHRg9M8aIa8io="
@@ -29,20 +32,11 @@ def load_server_public_key():
 
 def load_private_key(username):
     # Load the university doctor's private key from a PEM file
-    with open(f"{username}_private_key.pem" , "rb") as key_file:
+    with open(f"{username}_private_key.pem", "rb") as key_file:
         private_key = serialization.load_pem_private_key(
             key_file.read(), password=None, backend=default_backend()
         )
     return private_key
-
-
-# def load_public_key():
-#     # Load the university doctor's public key from a PEM file
-#     with open("client_public_key.pem", "rb") as key_file:
-#         public_key = serialization.load_pem_public_key(
-#             key_file.read(), backend=default_backend()
-#         )
-#     return public_key
 
 
 def verify_signature(data, signature):
@@ -65,7 +59,7 @@ def verify_signature(data, signature):
         return False
 
 
-def sign_data(data,username):
+def sign_data(data, username):
     # Load the university doctor's private key
     private_key = load_private_key(username)
 
@@ -94,24 +88,20 @@ def send_request(host, port, request_data):
     if isinstance(request_data, dict):
         request_data = str(request_data)
 
-    # Convert request_data to bytes
-    # request_data_bytes = request_data.encode()
-
-    ################
-    # Generate a hash of the request data
-    # hash_value = hashlib.sha256(request_data_bytes).hexdigest()
-
-    # Sign the hash with the university doctor's private key
-    # Replace the following line with the actual signing process
-    # response_data = response_data.decode()
     response_data_python = json.loads(json_data)
     if (
         "request_choice" in response_data_python
         and response_data_python["request_choice"] == "5"
     ):
-        signature = sign_data(response_data_python["markes"],response_data_python["username"])
+        signature = sign_data(
+            response_data_python["markes"], response_data_python["username"]
+        )
         # Create a dictionary to hold the request data and signature
-        signed_data = {"data": response_data_python["markes"], "signature": signature,"username":response_data_python["username"]}
+        signed_data = {
+            "data": response_data_python["markes"],
+            "signature": signature,
+            "username": response_data_python["username"],
+        }
         # Convert the signed_data to JSON string
         signed_data_json = json.dumps(signed_data)
         # Encrypt the data using the cipher
@@ -141,11 +131,11 @@ def send_request(host, port, request_data):
         data = json.dumps(request_data)
         # Encrypt the data using the cipher
         encrypted_data = cipher.encrypt(data.encode())
-        print("encrypted data:",encrypted_data)
+        print("encrypted data:", encrypted_data)
         client_socket.sendall(encrypted_data)
 
         response = client_socket.recv(1024)
-        print("responce data before decrypt:",response)
+        print("responce data before decrypt:", response)
         decrypted_data = cipher.decrypt(response)
         response_data = decrypted_data.decode()
         # print("Response", response_data)
@@ -311,7 +301,7 @@ def generate_key_pair(username):
 
     # Create unique filenames for the keys using the username
     private_key_filename = f"{username}_private_key.pem"
-    public_key_filename = f"{username}_public_key.pem" 
+    public_key_filename = f"{username}_public_key.pem"
     # Save the private key to a file
     with open(private_key_filename, "wb") as private_key_file:
         private_key_file.write(private_key_pem)
@@ -320,6 +310,57 @@ def generate_key_pair(username):
     with open(public_key_filename, "wb") as public_key_file:
         public_key_file.write(public_key_pem)
 
+
+def generate_csr(private_key, common_name, username):
+    csr = (
+        x509.CertificateSigningRequestBuilder()
+        .subject_name(x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, common_name)]))
+        .sign(private_key, hashes.SHA256(), default_backend())
+    )
+
+    csrfilename = f"{username}_csr.csr"
+
+    with open(csrfilename, "wb") as csrfile:
+        csrfile.write(csr.public_bytes(serialization.Encoding.PEM))
+
+    return csr
+
+
+def load_csr_file(username):
+    # Load the university doctor's private key from a PEM file
+    with open(f"{username}_csr.csr", "rb") as csr_file:
+        csr_data = csr_file.read()
+
+    return csr_data
+
+
+def send_csr(host, port, data,username):
+    client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    client_socket.connect((host, port))
+       # Create a dictionary to hold the data
+    data = {
+        "csr_file": data.decode('latin-1'),  # Convert binary data to string
+        "username": username
+    }
+
+    # Convert the dictionary to JSON
+    json_data = json.dumps(data)
+
+    # Send the JSON data over the socket
+    client_socket.sendall(json_data.encode())
+    # client_socket.sendall(data)
+
+    response = client_socket.recv(2048)
+    with open(f"{username}_certificate.pem", "wb") as cert_file:
+     cert_file.write(response)
+
+    # print("responce data before decrypt:", response)
+    client_socket.close()
+    return response
+
+
+# Generate key pair for the university doctor
+# private_key, public_key = generate_key_pair()
 
 if __name__ == "__main__":
     host = "127.0.0.1"  # Replace with your server IP
@@ -344,6 +385,16 @@ if __name__ == "__main__":
             "password": password,
             "role_id": role_id,
         }
+
+        if role_id == "2":
+            generate_key_pair(username)
+            common_name = "University Doctor"
+            csr = generate_csr(load_private_key(username), common_name, username)
+            csr = load_csr_file(username)
+
+            send_csr(host, port, csr,username)
+
+            # print("cccccccccccccccccccccc",csr)
 
         json_data = json.dumps(request_create_account)
 
@@ -410,14 +461,14 @@ if __name__ == "__main__":
         markes = input("Enter The Markes:")
 
         if decode_token(token, "role_id") == 2:
-            username = decode_token(token,"username")
-            generate_key_pair(username)
+            username = decode_token(token, "username")
+            # generate_key_pair(username)
 
             request_data = {
-                "action" : "Enter Markes",
+                "action": "Enter Markes",
                 "markes": markes,
                 "request_choice": "5",
-                "username":username,
+                "username": username,
             }
 
             json_data = json.dumps(request_data)
