@@ -7,6 +7,7 @@ from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding
 
+
 def receive_encrypted_session_key(ssl_socket):
     # Receive the length of the encrypted session key as a 4-byte integer
     print(ssl_socket.recv(4))
@@ -20,23 +21,36 @@ def receive_encrypted_session_key(ssl_socket):
     return encrypted_session_key
 
 
-def decrypt_and_verify_session_key(encrypted_session_key, private_key):
-    gpg_home = '/opt/homebrew/bin'  # Specify the path to the GPG executable
-    gpg = gnupg.GPG(gnupghome=gpg_home)
-    gpg = gnupg.GPG()
-    gpg.import_keys(private_key)
-    print(f"Private Key: {private_key}")
-    print(f"Encrypted Session Key: {encrypted_session_key}")
+# def decrypt_and_verify_session_key(encrypted_session_key, private_key):
+#     gpg_home = '/opt/homebrew/bin'  # Specify the path to the GPG executable
+#     gpg = gnupg.GPG(gnupghome=gpg_home)
+#     gpg = gnupg.GPG()
+#     gpg.import_keys(private_key)
+#     print(f"Private Key: {private_key}")
+#     print(f"Encrypted Session Key: {encrypted_session_key}")
 
-    decrypted_data = gpg.decrypt(encrypted_session_key)
+#     decrypted_data = gpg.decrypt(encrypted_session_key)
 
-    print(f"Decryption Status: {decrypted_data.status}")
-    print(f"Decrypted Data: {decrypted_data.data}")
+#     print(f"Decryption Status: {decrypted_data.status}")
+#     print(f"Decrypted Data: {decrypted_data.data}")
 
-    if not decrypted_data.ok:
-        print(f"Decryption failed: {decrypted_data.status}")
+#     if not decrypted_data.ok:
+#         print(f"Decryption failed: {decrypted_data.status}")
 
-    return decrypted_data.data
+#     return decrypted_data.data
+
+
+def decrypt_session_key(encrypted_key, private_key):
+    decrypted_key = private_key.decrypt(
+        encrypted_key,
+        padding.OAEP(
+            mgf=padding.MGF1(algorithm=hashes.SHA256()),
+            algorithm=hashes.SHA256(),
+            label=None
+        )
+    )
+    print('decrypted_key: ' ,decrypted_key)
+    return decrypted_key
 
 
 def send_approval_to_client(ssl_socket):
@@ -47,7 +61,7 @@ def send_approval_to_client(ssl_socket):
 
 def create_tls_server():
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    server_socket.bind(('localhost', 8835))
+    server_socket.bind(('localhost', 8838))
     server_socket.listen(1)
 
     print("Waiting for a connection...")
@@ -66,7 +80,7 @@ def create_tls_server():
     ssl_socket.do_handshake()
 
       # Load public key from file
-    with open('server_new_private_key.pem', 'rb') as key_file:
+    with open('server_private_key.pem', 'rb') as key_file:
         server_public_key = key_file.read()
 
     # Convert the loaded public key to a string
@@ -88,10 +102,10 @@ def create_tls_server():
 
 
     # Send and receive data over the secure connection
-    # data = ssl_socket.recv(1024)
-    # print(f"Received: {data.decode()}")
+    data = ssl_socket.recv(1024)
+    print(f"Received: {data.decode()}")
 
-    # ssl_socket.send(b"Hello from the server!")
+    ssl_socket.send(b"Hello from the server!")
 
     # Close the connection
     ssl_socket.close()
