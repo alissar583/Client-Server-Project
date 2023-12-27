@@ -1,8 +1,8 @@
 import socket
 import ssl
-from Crypto.Cipher import AES
+# from Crypto.Cipher import AES
 import os
-import gnupg
+# import gnupg
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding
@@ -61,7 +61,7 @@ def send_approval_to_client(ssl_socket):
 
 def create_tls_server():
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    server_socket.bind(('localhost', 8838))
+    server_socket.bind(('localhost', 8080))
     server_socket.listen(1)
 
     print("Waiting for a connection...")

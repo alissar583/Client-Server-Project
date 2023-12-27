@@ -141,9 +141,11 @@ def send_request(host, port, request_data):
         data = json.dumps(request_data)
         # Encrypt the data using the cipher
         encrypted_data = cipher.encrypt(data.encode())
+        print("encrypted data:",encrypted_data)
         client_socket.sendall(encrypted_data)
 
         response = client_socket.recv(1024)
+        print("responce data before decrypt:",response)
         decrypted_data = cipher.decrypt(response)
         response_data = decrypted_data.decode()
         # print("Response", response_data)
@@ -376,13 +378,13 @@ if __name__ == "__main__":
         role_id = decode_token(token, "role_id")
 
         role_name = get_user_role(role_id)
-        print("Aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+        # print("Aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
 
         userRole = {"action": "till user what are thier userRole", "role": role_name}
 
         json_data = json.dumps(userRole)
 
-        print("Aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+        # print("Aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
         response = send_request(host, port, json_data)
 
         print("Welcome as:", role_name)

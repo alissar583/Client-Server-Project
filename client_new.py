@@ -1,7 +1,7 @@
 import socket
 import ssl
 import os
-import gnupg
+# import gnupg
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import padding
 
@@ -47,17 +47,21 @@ def send_encrypted_session_key(ssl_socket, encrypted_session_key):
 
 def create_tls_client():
     client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    client_socket.connect(('localhost', 8838))
+    client_socket.connect(('localhost', 8080))
 
     # Create an SSL context
     context = ssl.create_default_context()
+    print("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+
     context.check_hostname = False
     context.verify_mode = ssl.CERT_NONE
 
     # Wrap the socket with TLS
     ssl_socket = context.wrap_socket(client_socket, server_hostname='localhost')
+
     # Perform the TLS handshake
     ssl_socket.do_handshake()
+
 
     # Send and receive data over the secure connection
     ssl_socket.send(b"Hello from the client!")
