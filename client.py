@@ -6,13 +6,18 @@ from cryptography.fernet import Fernet
 import json
 import hashlib
 import base64
+from cryptography.x509.oid import ExtensionOID, NameOID, ObjectIdentifier
 from cryptography.hazmat.primitives import serialization
+from cryptography.x509.oid import ExtensionOID, NameOID, ObjectIdentifier
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.hazmat.primitives import hashes
+from pyasn1.codec.der import encoder as der_encoder
+from pyasn1.type import univ
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography import x509
 from cryptography.x509.oid import NameOID
+from cryptography.hazmat.primitives.serialization import Encoding
 
 
 # Generate a random symmetric key
@@ -326,6 +331,98 @@ def generate_csr(private_key, common_name, username):
     return csr
 
 
+def generate_csr_with_permissions(private_key, common_name, username, permissions):
+    custom_extension_oid = ObjectIdentifier("1.2.3.4.5")
+    permissions_string = ",".join(permissions).encode('utf-8')  # Convert list to string and encode as bytes
+
+    # DER-encode the permissions string
+    permissions_der = der_encoder.encode(univ.OctetString(permissions_string))
+
+    extension = x509.SubjectAlternativeName([
+        x509.OtherName(custom_extension_oid, permissions_der)
+    ])
+
+    csr = (
+        x509.CertificateSigningRequestBuilder()
+        .subject_name(x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, common_name)]))
+        .add_extension(extension, False)
+        .sign(private_key, hashes.SHA256(), default_backend())
+    )
+
+    csrfilename = f"{username}_csr.csr"
+
+    with open(csrfilename, "wb") as csrfile:
+        csrfile.write(csr.public_bytes(serialization.Encoding.PEM))
+
+    return csr
+
+
+
+
+def read_permissions_from_csr(csr_filename):
+    with open(f"{csr_filename}_csr.csr", "rb") as csr_file:
+        csr = x509.load_pem_x509_csr(csr_file.read())
+    print('extensions asd', csr.extensions)
+    permissions_extension = csr.extensions.get_extension_for_oid(ExtensionOID.SUBJECT_ALTERNATIVE_NAME)   
+    print('extensions asd', permissions_extension)
+    if isinstance(permissions_extension.value, x509.SubjectAlternativeName):
+        print('dsds', permissions_extension.value)
+        for name in permissions_extension.value:
+            if isinstance(name, x509.OtherName) and name.type_id == ObjectIdentifier("1.2.3.4.5"):
+                permissions_der = name.value
+                permissions_string = permissions_der.decode('utf-8')  # Decode the DER-encoded permissions to a string
+                permissions = permissions_string.split(",")  # Split the string into a list of permissions
+                print('permissionspermissions', permissions)
+                return permissions
+    # Return an empty list if the permissions extension was not found or does not contain the expected values
+    return []
+    permissions_der = permissions_extension.value.value
+    permissions_string = permissions_der.decode('utf-8')  # Decode the DER-encoded permissions to a string
+    permissions = permissions_string.split(",")  # Split the string into a list of permissions
+
+    return permissions
+
+
+
+# def generate_csr_with_permssions(private_key, common_name, username, permissions):
+#     custom_extension_oid = "1.2.3.4.5"
+#     csr_builder = x509.CertificateSigningRequestBuilder()
+#     # Set subject information
+#     subject = x509.Name([
+#         x509.NameAttribute(x509.NameOID.COMMON_NAME, "Client"),
+#         # Add additional subject attributes as needed
+#     ])
+
+#     permissions = ["read_scientists_list", "write_data"]
+#     permissions_string = ",".join(permissions)  # Convert list to string
+#     extension = x509.Extension(
+#         x509.ObjectIdentifier(custom_extension_oid),
+#         critical=True,  # Mark the extension as critical if desired
+#         value=permissions_string.encode("utf-8")  # Encode the permissions as bytes
+#     )
+
+#     csr_builder = csr_builder.subject_name(subject)
+
+#     # Add custom extension using add_extension method
+#     csr_builder = csr_builder.add_extension(extension, critical=True)
+
+#     # csr_builder.add_extension(permission_extension, critical=False)
+
+#     # Generate the CSR
+#     private_key = serialization.load_pem_private_key(
+#         private_key, password=None, backend=default_backend()
+#     )
+#     csr = csr_builder.sign(private_key, default_backend())
+
+#     csrfilename = f"{username}_csr.csr"
+#     # Save the CSR to a file
+
+#     with open(csrfilename, "wb") as csrfile:
+#         csrfile.write(csr.public_bytes(serialization.Encoding.PEM))
+
+#     return csr
+
+
 def load_csr_file(username):
     # Load the university doctor's private key from a PEM file
     with open(f"{username}_csr.csr", "rb") as csr_file:
@@ -395,7 +492,16 @@ if __name__ == "__main__":
             send_csr(host, port, csr,username)
 
             # print("cccccccccccccccccccccc",csr)
-
+        if role_id == "1":
+            generate_key_pair(username)
+            common_name = "University Client"
+            permissions = ['read_scientists_list', "write_data", "read_tes", "res"]
+            csr = generate_csr_with_permissions(load_private_key(username), common_name, username, permissions)
+            csr = load_csr_file(username)
+            send_csr(host, port, csr,username)
+            per = read_permissions_from_csr(username)
+            print('cleint permisssions csr: ', csr)
+            print('permisssions csr: ', per)
         json_data = json.dumps(request_create_account)
 
         response = send_request(host, port, json_data)
