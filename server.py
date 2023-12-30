@@ -10,6 +10,9 @@ from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import rsa
+from cryptography.x509.oid import ExtensionOID, NameOID, ObjectIdentifier
+from pyasn1.codec.der import encoder as der_encoder
+from pyasn1.type import univ
 from cryptography import x509
 from cryptography.x509.oid import NameOID
 from datetime import datetime, timedelta
@@ -134,7 +137,7 @@ def verify_identity(csr_file_path, doctor_public_key):
     else:
         print("DOCTOR RELATED WITH PUBLIC KEY")
 
-def generate_certificate(csr_file, ca_private_key, ca_certificate):
+def generate_certificate(csr_file, ca_private_key, ca_certificate, permissions):
 
     csr = x509.load_pem_x509_csr(csr_file, default_backend())
 
@@ -151,7 +154,17 @@ def generate_certificate(csr_file, ca_private_key, ca_certificate):
     builder = builder.serial_number(x509.random_serial_number())
     builder = builder.not_valid_before(datetime.utcnow())  # Set the validity period as needed
     builder = builder.not_valid_after(datetime.utcnow() + timedelta(days=365))   # Set the validity period as needed
-    # builder = builder.add_extension(key_usage_extension, critical=False)     # Add any necessary extensions
+
+    custom_extension_oid = ObjectIdentifier("1.2.3.4.5")
+    permissions_string = ",".join(permissions).encode('utf-8')  # Convert list to string and encode as bytes
+
+    # DER-encode the permissions string
+    permissions_der = der_encoder.encode(univ.OctetString(permissions_string))
+
+    extension = x509.SubjectAlternativeName([
+        x509.OtherName(custom_extension_oid, permissions_der)
+    ])
+    builder = builder.add_extension(extension, critical=False)     # Add any necessary extensions
 
     # Sign the certificate using the CA's private key
     certificate = builder.sign(
@@ -164,6 +177,7 @@ def generate_certificate(csr_file, ca_private_key, ca_certificate):
     certificate_pem = certificate.public_bytes(
         encoding=serialization.Encoding.PEM
     )
+    print('adasjdasvd', certificate_pem)
     return certificate_pem
 
     # Send the digital certificate to the doctor
@@ -173,13 +187,32 @@ def generate_certificate(csr_file, ca_private_key, ca_certificate):
     #     cert_file.write(certificate_pem)
 
 
+def is_certificate_file(content):
+    return content.startswith(
+        "-----BEGIN CERTIFICATE REQUEST-----"
+    ) or content.endswith("-----END CERTIFICATE REQUEST-----")
+
+
+
+def is_csr_file(content):
+    print('csr contet', content)
+    return content.startswith(
+        "-----BEGIN CERTIFICATE REQUEST-----"
+    ) or content.endswith("-----END CERTIFICATE REQUEST-----")
+
+
+
+
 def handle_request(client_socket):
-    request = client_socket.recv(1024)
+    request = client_socket.recv(2048)
+    print("requesttttttttttttttttttttttttt11111",request)
     #####
     # Receive the data from the client
     data = request.decode()
-
+    
+    # is_csr_file()
     try:
+        print("newtestttttttttttttttttttttttttttttttt",data)
         # Parse the received JSON data
         received_data = json.loads(data)
         file = True
@@ -189,11 +222,13 @@ def handle_request(client_socket):
     if file == True:
         # Check if the CSR file is present in the request
         if "csr_file" in received_data:
+            # print(11111111111111111111111111111111)
             # Extract the CSR file and username from the received data
             csr_file_data = received_data["csr_file"].encode('latin-1')
             username = received_data["username"]
             verify_identity(csr_file_data, load_public_key(username))
-            certificate_to_doctor = generate_certificate(csr_file_data,load_ca_private_key(),load_ca_certificate())
+            permissions = ["read_scientists_list", "write_data", "read_tes", "res"]
+            certificate_to_doctor = generate_certificate(csr_file_data,load_ca_private_key(),load_ca_certificate(), permissions)
             ###########
             print("DOCTOR CERTICATE GENERATED",certificate_to_doctor)
             client_socket.sendall(certificate_to_doctor)
@@ -270,7 +305,7 @@ def handle_request(client_socket):
 def start_server(host, port):
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     server_socket.bind((host, port))
-    server_socket.listen(5)
+    server_socket.listen(6)
 
     print("Server started. Listening on {}:{}".format(host, port))
 
