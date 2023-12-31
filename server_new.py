@@ -1,6 +1,5 @@
 import socket
 import ssl
-# from Crypto.Cipher import AES
 import os
 from cryptography.hazmat.primitives.asymmetric import rsa
 import gnupg
