@@ -6,6 +6,7 @@ from cryptography.fernet import Fernet
 import json
 import hashlib
 import base64
+import ssl
 from cryptography.hazmat.primitives import serialization
 from cryptography.x509.oid import ExtensionOID, NameOID, ObjectIdentifier
 from cryptography.hazmat.backends import default_backend
@@ -85,14 +86,30 @@ def sign_data(data, username):
 
 
 def send_request(host, port, request_data):
-    client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    client_socket.connect((host, port))
-
     # Convert request_data to string if it's a dictionary
     if isinstance(request_data, dict):
         request_data = str(request_data)
 
     response_data_python = json.loads(json_data)
+
+    # Create an SSL context
+    context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
+
+    # Load the doctor's digital certificate and private key
+    context.load_cert_chain(
+        certfile=f'{response_data_python["username"]}_certificate.pem',
+        keyfile=f'{response_data_python["username"]}_private_key.pem',
+    )
+
+    # Establish a secure connection to the server
+    with socket.create_connection((host, port)) as sock:
+        with context.wrap_socket(sock, server_hostname=host) as ssock:
+            # Your secure connection is now established
+            # You can send and receive data using the 'ssock' object
+            ssock.sendall(b"Hello, server!")
+            response = ssock.recv(4096)
+            print(response.decode())
+
     if (
         "request_choice" in response_data_python
         and response_data_python["request_choice"] == "5"
@@ -131,6 +148,8 @@ def send_request(host, port, request_data):
             print("Signature is not valid.")
 
     else:
+        # client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        # client_socket.connect((host, port))
         # Convert the signed_data to JSON string
         data = json.dumps(request_data)
         # Encrypt the data using the cipher
@@ -332,14 +351,16 @@ def generate_csr(private_key, common_name, username):
 
 def generate_csr_with_permissions(private_key, common_name, username, permissions):
     custom_extension_oid = ObjectIdentifier("1.2.3.4.5")
-    permissions_string = ",".join(permissions).encode('utf-8')  # Convert list to string and encode as bytes
+    permissions_string = ",".join(permissions).encode(
+        "utf-8"
+    )  # Convert list to string and encode as bytes
 
     # DER-encode the permissions string
     permissions_der = der_encoder.encode(univ.OctetString(permissions_string))
 
-    extension = x509.SubjectAlternativeName([
-        x509.OtherName(custom_extension_oid, permissions_der)
-    ])
+    extension = x509.SubjectAlternativeName(
+        [x509.OtherName(custom_extension_oid, permissions_der)]
+    )
 
     csr = (
         x509.CertificateSigningRequestBuilder()
@@ -355,27 +376,40 @@ def generate_csr_with_permissions(private_key, common_name, username, permission
 
     return csr
 
+
 def read_permissions_from_csr(csr_filename):
     with open(f"{csr_filename}_certificate.pem", "rb") as cert_file:
         # print("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
         csr = x509.load_pem_x509_certificate(cert_file.read(), default_backend())
-    print('extensions asd', csr.extensions)
-    permissions_extension = csr.extensions.get_extension_for_oid(ExtensionOID.SUBJECT_ALTERNATIVE_NAME)   
-    print('extensions asd', permissions_extension)
+    print("extensions asd", csr.extensions)
+    permissions_extension = csr.extensions.get_extension_for_oid(
+        ExtensionOID.SUBJECT_ALTERNATIVE_NAME
+    )
+    print("extensions asd", permissions_extension)
     if isinstance(permissions_extension.value, x509.SubjectAlternativeName):
-        print('dsds', permissions_extension.value)
+        print("dsds", permissions_extension.value)
         for name in permissions_extension.value:
-            if isinstance(name, x509.OtherName) and name.type_id == ObjectIdentifier("1.2.3.4.5"):
+            if isinstance(name, x509.OtherName) and name.type_id == ObjectIdentifier(
+                "1.2.3.4.5"
+            ):
                 permissions_der = name.value
-                permissions_string = permissions_der.decode('utf-8')  # Decode the DER-encoded permissions to a string
-                permissions = permissions_string.split(",")  # Split the string into a list of permissions
+                permissions_string = permissions_der.decode(
+                    "utf-8"
+                )  # Decode the DER-encoded permissions to a string
+                permissions = permissions_string.split(
+                    ","
+                )  # Split the string into a list of permissions
                 # print('permissionspermissions', permissions)
                 return permissions
     # Return an empty list if the permissions extension was not found or does not contain the expected values
     return []
     permissions_der = permissions_extension.value.value
-    permissions_string = permissions_der.decode('utf-8')  # Decode the DER-encoded permissions to a string
-    permissions = permissions_string.split(",")  # Split the string into a list of permissions
+    permissions_string = permissions_der.decode(
+        "utf-8"
+    )  # Decode the DER-encoded permissions to a string
+    permissions = permissions_string.split(
+        ","
+    )  # Split the string into a list of permissions
 
     return permissions
 
@@ -388,13 +422,13 @@ def load_csr_file(username):
     return csr_data
 
 
-def send_csr(host, port, data,username):
+def send_csr(host, port, data, username):
     client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     client_socket.connect((host, port))
-       # Create a dictionary to hold the data
+    # Create a dictionary to hold the data
     data = {
-        "csr_file": data.decode('latin-1'),  # Convert binary data to string
-        "username": username
+        "csr_file": data.decode("latin-1"),  # Convert binary data to string
+        "username": username,
     }
 
     # Convert the dictionary to JSON
@@ -407,7 +441,7 @@ def send_csr(host, port, data,username):
 
     response = client_socket.recv(2048)
     with open(f"{username}_certificate.pem", "wb") as cert_file:
-     cert_file.write(response)
+        cert_file.write(response)
 
     # per = read_permissions_from_csr(username)
     # print('permissions certiff', per)
@@ -449,7 +483,7 @@ if __name__ == "__main__":
             csr = generate_csr(load_private_key(username), common_name, username)
             csr = load_csr_file(username)
             # print("fe2",csr)
-            send_csr(host, port, csr,username)
+            send_csr(host, port, csr, username)
 
             # print("cccccccccccccccccccccc",csr)
         if role_id == "1":
@@ -457,9 +491,9 @@ if __name__ == "__main__":
             common_name = "University Student"
             csr = generate_csr(load_private_key(username), common_name, username)
             csr = load_csr_file(username)
-            send_csr(host, port, csr,username)
+            send_csr(host, port, csr, username)
             per = read_permissions_from_csr(username)
-            print('client permisssions csr: ', per)
+            print("client permisssions csr: ", per)
 
         json_data = json.dumps(request_create_account)
 
