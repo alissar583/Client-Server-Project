@@ -86,16 +86,14 @@ def sign_data(data, username):
 
 
 def send_request(host, port, request_data):
-    # Convert request_data to string if it's a dictionary
+ # Convert request_data to string if it's a dictionary
     if isinstance(request_data, dict):
-        request_data = str(request_data)
+        request_data = json.dumps(request_data)
 
-    response_data_python = json.loads(json_data)
+    # Create an SSL context for the client
+    context = ssl.create_default_context()
 
-    # Create an SSL context
-    context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
-
-    # Load the doctor's digital certificate and private key
+    # Load the client's digital certificate and private key
     context.load_cert_chain(
         certfile=f'{response_data_python["username"]}_certificate.pem',
         keyfile=f'{response_data_python["username"]}_private_key.pem',
@@ -106,65 +104,67 @@ def send_request(host, port, request_data):
         with context.wrap_socket(sock, server_hostname=host) as ssock:
             # Your secure connection is now established
             # You can send and receive data using the 'ssock' object
+            print("Connected to server")
             ssock.sendall(b"Hello, server!")
             response = ssock.recv(4096)
             print(response.decode())
 
-    if (
-        "request_choice" in response_data_python
-        and response_data_python["request_choice"] == "5"
-    ):
-        signature = sign_data(
-            response_data_python["markes"], response_data_python["username"]
-        )
-        # Create a dictionary to hold the request data and signature
-        signed_data = {
-            "data": response_data_python["markes"],
-            "signature": signature,
-            "username": response_data_python["username"],
-        }
-        # Convert the signed_data to JSON string
-        signed_data_json = json.dumps(signed_data)
-        # Encrypt the data using the cipher
-        encrypted_data = cipher.encrypt(signed_data_json.encode())
-        client_socket.sendall(encrypted_data)
 
-        response = client_socket.recv(1024)
-        decrypted_data = cipher.decrypt(response)
-        response_data = decrypted_data.decode()
+    # if (
+    #     "request_choice" in response_data_python
+    #     and response_data_python["request_choice"] == "5"
+    # ):
+    #     signature = sign_data(
+    #         response_data_python["markes"], response_data_python["username"]
+    #     )
+    #     # Create a dictionary to hold the request data and signature
+    #     signed_data = {
+    #         "data": response_data_python["markes"],
+    #         "signature": signature,
+    #         "username": response_data_python["username"],
+    #     }
+    #     # Convert the signed_data to JSON string
+    #     signed_data_json = json.dumps(signed_data)
+    #     # Encrypt the data using the cipher
+    #     encrypted_data = cipher.encrypt(signed_data_json.encode())
+    #     client_socket.sendall(encrypted_data)
 
-        # Verify the digital signature received from the server
-        response_data_json = json.loads(response_data)
-        response_signature = response_data_json.get("signature")
-        response_data = response_data_json.get("data")
+    #     response = client_socket.recv(1024)
+    #     decrypted_data = cipher.decrypt(response)
+    #     response_data = decrypted_data.decode()
 
-        # Verify the signature using the university doctor's public key
-        is_valid_signature = verify_signature(response_data, response_signature)
+    #     # Verify the digital signature received from the server
+    #     response_data_json = json.loads(response_data)
+    #     response_signature = response_data_json.get("signature")
+    #     response_data = response_data_json.get("data")
 
-        if is_valid_signature:
-            print("Signature is valid.")
-            print("Response:", response_data)
-        else:
-            print("Signature is not valid.")
+    #     # Verify the signature using the university doctor's public key
+    #     is_valid_signature = verify_signature(response_data, response_signature)
 
-    else:
-        # client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        # client_socket.connect((host, port))
-        # Convert the signed_data to JSON string
-        data = json.dumps(request_data)
-        # Encrypt the data using the cipher
-        encrypted_data = cipher.encrypt(data.encode())
-        # print("encrypted data:", encrypted_data)
-        client_socket.sendall(encrypted_data)
+    #     if is_valid_signature:
+    #         print("Signature is valid.")
+    #         print("Response:", response_data)
+    #     else:
+    #         print("Signature is not valid.")
 
-        response = client_socket.recv(1024)
-        # print("responce data before decrypt:", response)
-        decrypted_data = cipher.decrypt(response)
-        response_data = decrypted_data.decode()
-        # print("Response", response_data)
+    # else:
+    #     # client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    #     # client_socket.connect((host, port))
+    #     # Convert the signed_data to JSON string
+    #     data = json.dumps(request_data)
+    #     # Encrypt the data using the cipher
+    #     encrypted_data = cipher.encrypt(data.encode())
+    #     # print("encrypted data:", encrypted_data)
+    #     client_socket.sendall(encrypted_data)
 
-    client_socket.close()
-    return response_data
+    #     response = client_socket.recv(1024)
+    #     # print("responce data before decrypt:", response)
+    #     decrypted_data = cipher.decrypt(response)
+    #     response_data = decrypted_data.decode()
+    #     # print("Response", response_data)
+
+    # client_socket.close()
+    # return response_data
     ###################
 
 
@@ -377,17 +377,16 @@ def generate_csr_with_permissions(private_key, common_name, username, permission
     return csr
 
 
-def read_permissions_from_csr(csr_filename):
+def read_permissions_from_certificate(csr_filename):
     with open(f"{csr_filename}_certificate.pem", "rb") as cert_file:
-        # print("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
         csr = x509.load_pem_x509_certificate(cert_file.read(), default_backend())
-    print("extensions asd", csr.extensions)
+    # print("extensions asd", csr.extensions)
     permissions_extension = csr.extensions.get_extension_for_oid(
         ExtensionOID.SUBJECT_ALTERNATIVE_NAME
     )
-    print("extensions asd", permissions_extension)
+    # print("extensions asd", permissions_extension)
     if isinstance(permissions_extension.value, x509.SubjectAlternativeName):
-        print("dsds", permissions_extension.value)
+        # print("dsds", permissions_extension.value)
         for name in permissions_extension.value:
             if isinstance(name, x509.OtherName) and name.type_id == ObjectIdentifier(
                 "1.2.3.4.5"
@@ -399,7 +398,6 @@ def read_permissions_from_csr(csr_filename):
                 permissions = permissions_string.split(
                     ","
                 )  # Split the string into a list of permissions
-                # print('permissionspermissions', permissions)
                 return permissions
     # Return an empty list if the permissions extension was not found or does not contain the expected values
     return []
@@ -433,19 +431,14 @@ def send_csr(host, port, data, username):
 
     # Convert the dictionary to JSON
     json_data = json.dumps(data)
-    # print("ppppppppppppppppppppppppp",json_data.encode())
 
     # Send the JSON data over the socket
     client_socket.sendall(json_data.encode())
-    # client_socket.sendall(data)
 
     response = client_socket.recv(2048)
     with open(f"{username}_certificate.pem", "wb") as cert_file:
         cert_file.write(response)
 
-    # per = read_permissions_from_csr(username)
-    # print('permissions certiff', per)
-    # print("responce data before decrypt:", response)
     client_socket.close()
     return response
 
@@ -476,28 +469,27 @@ if __name__ == "__main__":
             "password": password,
             "role_id": role_id,
         }
+        json_data = json.dumps(request_create_account)
+
+        # response = send_request(host, port, json_data)
 
         if role_id == "2":
             generate_key_pair(username)
             common_name = "University Doctor"
             csr = generate_csr(load_private_key(username), common_name, username)
             csr = load_csr_file(username)
-            # print("fe2",csr)
             send_csr(host, port, csr, username)
 
-            # print("cccccccccccccccccccccc",csr)
         if role_id == "1":
             generate_key_pair(username)
             common_name = "University Student"
             csr = generate_csr(load_private_key(username), common_name, username)
             csr = load_csr_file(username)
             send_csr(host, port, csr, username)
-            per = read_permissions_from_csr(username)
+            per = read_permissions_from_certificate(username)
             print("client permisssions csr: ", per)
 
-        json_data = json.dumps(request_create_account)
-
-        response = send_request(host, port, json_data)
+        
         # Store the user in the database
         store_user_in_database(username, password, role_id, exists)
 
