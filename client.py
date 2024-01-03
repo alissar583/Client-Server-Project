@@ -2,11 +2,11 @@ import socket
 import json
 import mysql.connector
 import jwt
+import ssl
 from cryptography.fernet import Fernet
 import json
 import hashlib
 import base64
-import ssl
 from cryptography.hazmat.primitives import serialization
 from cryptography.x509.oid import ExtensionOID, NameOID, ObjectIdentifier
 from cryptography.hazmat.backends import default_backend
@@ -68,8 +68,6 @@ def sign_data(data, username):
     # Load the university doctor's private key
     private_key = load_private_key(username)
 
-    # print("dataaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa in sign",data.encode())
-
     # Sign the data using the private key
     signature = private_key.sign(
         data.encode(),
@@ -84,87 +82,87 @@ def sign_data(data, username):
 
     return signature_str
 
+def init_connect(host, port):
+    client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    client_socket.connect((host, port))
+    return client_socket
 
-def send_request(host, port, request_data):
- # Convert request_data to string if it's a dictionary
-    if isinstance(request_data, dict):
-        request_data = json.dumps(request_data)
-
-    # Create an SSL context for the client
+def send_request(host, port, request_data, client_socket):
     context = ssl.create_default_context()
+    context.check_hostname = False
+    context.verify_mode = ssl.CERT_NONE
+    # Wrap the socket with TLS
+    context.load_cert_chain(certfile=f'{username}_certificate.pem', keyfile=f'{username}_private_key.pem')
+    ssl_socket = context.wrap_socket(client_socket, server_hostname='localhost')
+    ssl_socket.do_handshake()
+    print('success do_handshake')
+    # ssl_socket.send(b"Hello from the client!")
 
-    # Load the client's digital certificate and private key
-    context.load_cert_chain(
-        certfile=f'{response_data_python["username"]}_certificate.pem',
-        keyfile=f'{response_data_python["username"]}_private_key.pem',
-    )
+    # Convert request_data to string if it's a dictionary
+    if isinstance(request_data, dict):
+        request_data = str(request_data)
 
-    # Establish a secure connection to the server
-    with socket.create_connection((host, port)) as sock:
-        with context.wrap_socket(sock, server_hostname=host) as ssock:
-            # Your secure connection is now established
-            # You can send and receive data using the 'ssock' object
-            print("Connected to server")
-            ssock.sendall(b"Hello, server!")
-            response = ssock.recv(4096)
-            print(response.decode())
+    response_data_python = json.loads(json_data)
+    if (
+        "request_choice" in response_data_python
+        and response_data_python["request_choice"] == "5"
+    ):
+        signature = sign_data(
+            response_data_python["markes"], response_data_python["username"]
+        )
+        # Create a dictionary to hold the request data and signature
+        signed_data = {
+            "data": response_data_python["markes"],
+            "signature": signature,
+            "username": response_data_python["username"],
+        }
+        # Convert the signed_data to JSON string
+        signed_data_json = json.dumps(signed_data)
+        # Encrypt the data using the cipher
+        encrypted_data = cipher.encrypt(signed_data_json.encode())
+        ssl_socket.send(encrypted_data)
 
+        response = ssl_socket.recv(2048)
+        decrypted_data = cipher.decrypt(response)
+        response_data = decrypted_data.decode()
 
-    # if (
-    #     "request_choice" in response_data_python
-    #     and response_data_python["request_choice"] == "5"
-    # ):
-    #     signature = sign_data(
-    #         response_data_python["markes"], response_data_python["username"]
-    #     )
-    #     # Create a dictionary to hold the request data and signature
-    #     signed_data = {
-    #         "data": response_data_python["markes"],
-    #         "signature": signature,
-    #         "username": response_data_python["username"],
-    #     }
-    #     # Convert the signed_data to JSON string
-    #     signed_data_json = json.dumps(signed_data)
-    #     # Encrypt the data using the cipher
-    #     encrypted_data = cipher.encrypt(signed_data_json.encode())
-    #     client_socket.sendall(encrypted_data)
+        # Verify the digital signature received from the server
+        response_data_json = json.loads(response_data)
+        response_signature = response_data_json.get("signature")
+        response_data = response_data_json.get("data")
 
-    #     response = client_socket.recv(1024)
-    #     decrypted_data = cipher.decrypt(response)
-    #     response_data = decrypted_data.decode()
+        # Verify the signature using the university doctor's public key
+        is_valid_signature = verify_signature(response_data, response_signature)
 
-    #     # Verify the digital signature received from the server
-    #     response_data_json = json.loads(response_data)
-    #     response_signature = response_data_json.get("signature")
-    #     response_data = response_data_json.get("data")
+        if is_valid_signature:
+            print("Signature is valid.")
+            print("Response:", response_data)
+        else:
+            print("Signature is not valid.")
 
-    #     # Verify the signature using the university doctor's public key
-    #     is_valid_signature = verify_signature(response_data, response_signature)
+    else:
+        # note2 to delete or add send from server
+        # Convert the signed_data to JSON string
+        data = json.dumps(request_data)
+        # print(data)
+        # Encrypt the data using the cipher
+        encrypted_data = cipher.encrypt(data.encode())
+        print("send data0",encrypted_data)
+        ssl_socket.send(encrypted_data)
+        ###to here
 
-    #     if is_valid_signature:
-    #         print("Signature is valid.")
-    #         print("Response:", response_data)
-    #     else:
-    #         print("Signature is not valid.")
+        response = ssl_socket.recv(1024)
+        # Decrypt the response data
+        print("sdfghjkl",response)
 
-    # else:
-    #     # client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    #     # client_socket.connect((host, port))
-    #     # Convert the signed_data to JSON string
-    #     data = json.dumps(request_data)
-    #     # Encrypt the data using the cipher
-    #     encrypted_data = cipher.encrypt(data.encode())
-    #     # print("encrypted data:", encrypted_data)
-    #     client_socket.sendall(encrypted_data)
+        response_data = cipher.decrypt(response)
 
-    #     response = client_socket.recv(1024)
-    #     # print("responce data before decrypt:", response)
-    #     decrypted_data = cipher.decrypt(response)
-    #     response_data = decrypted_data.decode()
-    #     # print("Response", response_data)
-
+    # Print the decrypted response
+    # print(response_data.decode())
+        print(response_data)
+        # response_data = decrypted_data
     # client_socket.close()
-    # return response_data
+    return response_data
     ###################
 
 
@@ -189,23 +187,19 @@ def get_user_role_id(username):
     # Query the database to get the role_id of the user
     connection = mysql.connector.connect(host="localhost", user="root", database="chat")
     cursor = connection.cursor()
-
     query = "SELECT role_id FROM users WHERE username = %s"
     cursor.execute(query, (username,))
     result = cursor.fetchone()
     role_id = result[0]
-
-    cursor.nextset()  # Move to the next result set
-    # cursor.close()
+    cursor.nextset() 
     connection.close()
-
     return role_id
 
 
 def generate_token(username, role_id):
     # Generate a JWT token using the username and role_id
     payload = {"username": username, "role_id": role_id}
-    secret_key = "myapp"  # Replace with your own secret key
+    secret_key = "myapp"  
     token = jwt.encode(payload, secret_key, algorithm="HS256")
     return token
 
@@ -227,7 +221,6 @@ def decode_token(token, entity):
 
 
 def get_user_role(role_id):
-    # print("roooooooooooooooooooooooooooooooole",role_id)
     # Query the database to get the role information of the user
     connection = mysql.connector.connect(host="localhost", user="root", database="chat")
     cursor = connection.cursor()
@@ -246,9 +239,7 @@ def get_user_role(role_id):
     role_name = result[0] if result else None
 
     cursor.nextset()  # Move to the next result set
-    # print("fincal",role_name)
 
-    # cursor.close()
     connection.close()
     print("ffff", role_name)
 
@@ -351,16 +342,14 @@ def generate_csr(private_key, common_name, username):
 
 def generate_csr_with_permissions(private_key, common_name, username, permissions):
     custom_extension_oid = ObjectIdentifier("1.2.3.4.5")
-    permissions_string = ",".join(permissions).encode(
-        "utf-8"
-    )  # Convert list to string and encode as bytes
+    permissions_string = ",".join(permissions).encode('utf-8')  # Convert list to string and encode as bytes
 
     # DER-encode the permissions string
     permissions_der = der_encoder.encode(univ.OctetString(permissions_string))
 
-    extension = x509.SubjectAlternativeName(
-        [x509.OtherName(custom_extension_oid, permissions_der)]
-    )
+    extension = x509.SubjectAlternativeName([
+        x509.OtherName(custom_extension_oid, permissions_der)
+    ])
 
     csr = (
         x509.CertificateSigningRequestBuilder()
@@ -376,57 +365,45 @@ def generate_csr_with_permissions(private_key, common_name, username, permission
 
     return csr
 
-
-def read_permissions_from_certificate(csr_filename):
+def read_permissions_from_csr(csr_filename):
     with open(f"{csr_filename}_certificate.pem", "rb") as cert_file:
         csr = x509.load_pem_x509_certificate(cert_file.read(), default_backend())
-    # print("extensions asd", csr.extensions)
-    permissions_extension = csr.extensions.get_extension_for_oid(
-        ExtensionOID.SUBJECT_ALTERNATIVE_NAME
-    )
-    # print("extensions asd", permissions_extension)
+    print('extensions asd', csr.extensions)
+    permissions_extension = csr.extensions.get_extension_for_oid(ExtensionOID.SUBJECT_ALTERNATIVE_NAME)   
+    print('extensions asd', permissions_extension)
     if isinstance(permissions_extension.value, x509.SubjectAlternativeName):
-        # print("dsds", permissions_extension.value)
+        print('dsds', permissions_extension.value)
         for name in permissions_extension.value:
-            if isinstance(name, x509.OtherName) and name.type_id == ObjectIdentifier(
-                "1.2.3.4.5"
-            ):
+            if isinstance(name, x509.OtherName) and name.type_id == ObjectIdentifier("1.2.3.4.5"):
                 permissions_der = name.value
-                permissions_string = permissions_der.decode(
-                    "utf-8"
-                )  # Decode the DER-encoded permissions to a string
-                permissions = permissions_string.split(
-                    ","
-                )  # Split the string into a list of permissions
+                permissions_string = permissions_der.decode('utf-8')  # Decode the DER-encoded permissions to a string
+                permissions = permissions_string.split(",")  # Split the string into a list of permissions
+                # print('permissionspermissions', permissions)
                 return permissions
     # Return an empty list if the permissions extension was not found or does not contain the expected values
     return []
     permissions_der = permissions_extension.value.value
-    permissions_string = permissions_der.decode(
-        "utf-8"
-    )  # Decode the DER-encoded permissions to a string
-    permissions = permissions_string.split(
-        ","
-    )  # Split the string into a list of permissions
+    permissions_string = permissions_der.decode('utf-8')  # Decode the DER-encoded permissions to a string
+    permissions = permissions_string.split(",")  # Split the string into a list of permissions
 
     return permissions
 
 
 def load_csr_file(username):
-    # Load the university doctor's private key from a PEM file
+    # Load  private key from a PEM file
     with open(f"{username}_csr.csr", "rb") as csr_file:
         csr_data = csr_file.read()
 
     return csr_data
 
 
-def send_csr(host, port, data, username):
+def send_csr(host, port, data,username):
     client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     client_socket.connect((host, port))
-    # Create a dictionary to hold the data
+       # Create a dictionary to hold the data
     data = {
-        "csr_file": data.decode("latin-1"),  # Convert binary data to string
-        "username": username,
+        "csr_file": data.decode('latin-1'),  # Convert binary data to string
+        "username": username
     }
 
     # Convert the dictionary to JSON
@@ -436,145 +413,145 @@ def send_csr(host, port, data, username):
     client_socket.sendall(json_data.encode())
 
     response = client_socket.recv(2048)
+    print('csr functio', response)
     with open(f"{username}_certificate.pem", "wb") as cert_file:
-        cert_file.write(response)
+     cert_file.write(response)
 
-    client_socket.close()
-    return response
+    # client_socket.close()
+    return client_socket
 
 
-# Generate key pair for the university doctor
-# private_key, public_key = generate_key_pair()
 
 if __name__ == "__main__":
-    host = "127.0.0.1"  # Replace with your server IP
-    port = 8081  # Replace with your server port
+    host = "localhost"  
+    port = 8049
 
-    # Prompt the user for input
+    while True:
+        request_choice = input(
+                "Enter '1' to create an account or '2' to login or '3' to access university system or '4' to complete your info or '5' to submet markes or '6' to exit: "
+            )
 
-    request_choice = input(
-        "Enter '1' to create an account or '2' to login or '3' to access university system or '4' to complete your info or '5' to submet markes: "
-    )
+        if request_choice == "1":
+                username = input("Enter username: ")
+                password = input("Enter password: ")
+                role_id = input("Enter role: ")
 
-    if request_choice == "1":
-        username = input("Enter username: ")
-        password = input("Enter password: ")
-        role_id = input("Enter role: ")
+                exists = False
+                # User does not exist, send create account request
+                request_create_account = {
+                    "action": "CREATE_ACCOUNT",
+                    "username": username,
+                    "password": password,
+                    "role_id": role_id,
+                }
 
-        exists = False
-        # User does not exist, send create account request
-        request_create_account = {
-            "action": "CREATE_ACCOUNT",
-            "username": username,
-            "password": password,
-            "role_id": role_id,
-        }
-        json_data = json.dumps(request_create_account)
+                if role_id == "2":
+                    generate_key_pair(username)
+                    print('keys sucee')
+                    common_name = "University Doctor"
+                    csr = generate_csr(load_private_key(username), common_name, username)
+                    csr = load_csr_file(username)
+                    client_socket =  send_csr(host, port, csr,username)
 
-        # response = send_request(host, port, json_data)
+                if role_id == "1":
+                    generate_key_pair(username)
+                    common_name = "University Student"
+                    csr = generate_csr(load_private_key(username), common_name, username)
+                    csr = load_csr_file(username)
+                    print('send_csr')
+                    client_socket =  send_csr(host, port, csr, username)
+                    print('here')
+                    per = read_permissions_from_csr(username)
+                    print('client permisssions csr: ', per)
 
-        if role_id == "2":
-            generate_key_pair(username)
-            common_name = "University Doctor"
-            csr = generate_csr(load_private_key(username), common_name, username)
-            csr = load_csr_file(username)
-            send_csr(host, port, csr, username)
+                json_data = json.dumps(request_create_account)
+                print('here')
 
-        if role_id == "1":
-            generate_key_pair(username)
-            common_name = "University Student"
-            csr = generate_csr(load_private_key(username), common_name, username)
-            csr = load_csr_file(username)
-            send_csr(host, port, csr, username)
-            per = read_permissions_from_certificate(username)
-            print("client permisssions csr: ", per)
+                response = send_request(host, port, json_data, client_socket)
+                # Store the user in the database
+                store_user_in_database(username, password, role_id, exists)
 
-        
-        # Store the user in the database
-        store_user_in_database(username, password, role_id, exists)
+        elif request_choice == "2":
+                username = input("Enter username: ")
+                password = input("Enter password: ")
 
-    elif request_choice == "2":
-        username = input("Enter username: ")
-        password = input("Enter password: ")
+                if user_exists(username):
+                    exists = True
+                    # User exists, send login request
+                    request_login = {
+                        "action": "LOGIN",
+                        "username": username,
+                        "password": password,
+                    }
 
-        if user_exists(username):
-            exists = True
-            # User exists, send login request
-            request_login = {
-                "action": "LOGIN",
-                "username": username,
-                "password": password,
-            }
+                    json_data = json.dumps(request_login)
+                    client_socket = init_connect(host,port)
+                    response = send_request(host, port, json_data, client_socket)
 
-            json_data = json.dumps(request_login)
 
-            response = send_request(host, port, json_data)
+                else:
+                    print("User does not exist. Please create an account.")
 
-            # print("Response",response)
+        elif request_choice == "3":
+                token = input("token: ")
+                role_id = decode_token(token, "role_id")
 
+                role_name = get_user_role(role_id)
+
+                userRole = {"action": "till user what are thier userRole", "role": role_name}
+
+                json_data = json.dumps(userRole)
+                client_socket = init_connect(host,port)
+
+                response = send_request(host, port, json_data, client_socket)
+
+                print("Welcome as:", role_name)
+
+        elif request_choice == "4":
+                token = input("Enter Your Token: ")
+                phone = input("Enter Your Phone Number: ")
+
+                request_data = {
+                    "token": token,
+                    "phone": phone,
+                    "username": decode_token(token, "username"),
+                    "request_choice": "4",
+                }
+
+                json_data = json.dumps(request_data)
+                client_socket = init_connect(host,port)
+
+                send_request(host, port, json_data, client_socket)
+                print("Updated Succefully")
+
+        elif request_choice == "5":
+                token = input("Enter Your Token: ")
+                markes = input("Enter The Markes:")
+
+                if decode_token(token, "role_id") == 2:
+                    username = decode_token(token, "username")
+
+                    request_data = {
+                        "action": "Enter Markes",
+                        "markes": markes,
+                        "request_choice": "5",
+                        "username": username,
+                    }
+
+                    json_data = json.dumps(request_data)
+                    client_socket = init_connect(host,port)
+
+                    send_request(host, port, json_data, client_socket)
+                    print("Sended Markes Succefully")
+                else:
+                    print("Invalid Request")
+        elif request_choice == "6":
+                break
         else:
-            print("User does not exist. Please create an account.")
+                print("Invalid choice.")
 
-    elif request_choice == "3":
-        token = input("token: ")
-        role_id = decode_token(token, "role_id")
-
-        role_name = get_user_role(role_id)
-        # print("Aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
-
-        userRole = {"action": "till user what are thier userRole", "role": role_name}
-
-        json_data = json.dumps(userRole)
-
-        # print("Aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
-        response = send_request(host, port, json_data)
-
-        print("Welcome as:", role_name)
-
-    elif request_choice == "4":
-        token = input("Enter Your Token: ")
-        phone = input("Enter Your Phone Number: ")
-
-        request_data = {
-            "token": token,
-            "phone": phone,
-            "username": decode_token(token, "username"),
-            "request_choice": "4",
-        }
-
-        json_data = json.dumps(request_data)
-
-        send_request(host, port, json_data)
-        print("Updated Succefully")
-
-    elif request_choice == "5":
-        token = input("Enter Your Token: ")
-        markes = input("Enter The Markes:")
-
-        if decode_token(token, "role_id") == 2:
-            username = decode_token(token, "username")
-            # generate_key_pair(username)
-
-            request_data = {
-                "action": "Enter Markes",
-                "markes": markes,
-                "request_choice": "5",
-                "username": username,
-            }
-
-            json_data = json.dumps(request_data)
-
-            send_request(host, port, json_data)
-            print("Sended Markes Succefully")
-
-        else:
-            print("Invalid Request")
-
-    else:
-        print("Invalid choice.")
-
-    # Generate and return the token with the response
-    if request_choice == "1" or request_choice == "2":
-        role_id = get_user_role_id(username)
-        token = generate_token(username, role_id)
-        print("Token:", token)
+            # Generate and return the token with the response
+        if request_choice == "1" or request_choice == "2":
+                role_id = get_user_role_id(username)
+                token = generate_token(username, role_id)
+                print("Token:", token)
